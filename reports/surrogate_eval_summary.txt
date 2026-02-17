@@ -1,0 +1,21 @@
+Surrogate evaluation (proper)
+Test size: 0.2
+Random seed: 42
+
+Test accuracy: 0.9790
+CV (mean ± std) accuracy: 0.9801 ± 0.0022
+
+Classification report (test):
+              precision    recall  f1-score   support
+
+           0     1.0000    1.0000    1.0000         1
+           1     0.9761    0.9951    0.9855       615
+           2     1.0000    1.0000    1.0000         3
+           3     0.9713    0.9135    0.9415       185
+           4     0.9845    0.9845    0.9845       129
+           5     0.9882    0.9844    0.9863       256
+
+    accuracy                         0.9790      1189
+   macro avg     0.9867    0.9796    0.9830      1189
+weighted avg     0.9789    0.9790    0.9788      1189
+
