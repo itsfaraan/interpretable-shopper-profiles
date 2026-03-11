@@ -24,16 +24,15 @@ df = load_data()
 clf = load_model()
 
 # 2. WE DEFINE THE FEATURES
-feature_cols = [c for c in df.columns if c not in ["CustomerID", "ClusterID"]]
+feature_cols = [c for c in df.columns if c not in ["CustomerID", "ClusterID", "LastInvoiceDate", "ClusterName"]]
 
 # 3. NOW WE CAN ANALYZE THE DATA TO NAME THE CLUSTERS
 def assign_personas_dynamically(dataframe):
     """Automatically assigns persona names based on the cluster's mathematical averages."""
     cluster_means = dataframe.groupby('ClusterID')[feature_cols].mean()
     
-    p_map = {}
-    a_map = {}
-    
+    p_map = {}    
+    a_map = {}  
     for c_id, row in cluster_means.iterrows():
         if row['Monetary'] > 50000: 
             p_map[c_id] = "The True VIPs"
@@ -298,4 +297,3 @@ with tab_data:
         use_container_width=True,
         height=600
     )
-

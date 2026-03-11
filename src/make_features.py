@@ -52,13 +52,19 @@ def build_customer_features(df: pd.DataFrame) -> pd.DataFrame:
     # خرید واقعی (غیرکنسلی + مبلغ مثبت)
     inv_buy = inv[(inv["IsCancelled"] == False) & (inv["InvoiceTotal"] > 0)].copy()
 
+    # --- Inside make_features.py -> build_customer_features ---
+
     # RFM
     last_buy = inv_buy.groupby("CustomerID")["InvoiceDate"].max()
+    
+    # NEW: Keep the actual timestamp as a standalone feature for temporal splitting
+    last_invoice_date = last_buy.rename("LastInvoiceDate") 
+    
     recency = (reference_date - last_buy).dt.days.rename("Recency")
     frequency = inv_buy.groupby("CustomerID")["InvoiceNo"].nunique().rename("Frequency")
     monetary = inv_buy.groupby("CustomerID")["InvoiceTotal"].sum().rename("Monetary")
 
-    # ویژگی‌های زمانی
+    # ویژگی‌های زمانی (Temporal features)
     inv_buy["DayOfWeek"] = inv_buy["InvoiceDate"].dt.dayofweek
     inv_buy["Hour"] = inv_buy["InvoiceDate"].dt.hour
 
@@ -74,20 +80,24 @@ def build_customer_features(df: pd.DataFrame) -> pd.DataFrame:
               .rename("Night_Shopper")
     )
 
-    # تنوع سبد (خط-محور، فقط خرید واقعی)
+    # تنوع سبد (Basket diversity)
     df_buy_lines = df[(df["IsCancelled"] == False) & (df["LineTotal"] > 0)].copy()
     basket_diversity = df_buy_lines.groupby("CustomerID")["StockCode"].nunique().rename("Basket_Diversity")
 
-    # نرخ کنسلی (فاکتور-محور)
+    # نرخ کنسلی (Return rate)
     total_invoices = inv.groupby("CustomerID")["InvoiceNo"].nunique()
     cancelled_invoices = inv[inv["IsCancelled"] == True].groupby("CustomerID")["InvoiceNo"].nunique()
     return_rate = (cancelled_invoices / total_invoices).fillna(0).rename("Return_Rate")
 
-    # جدول نهایی
+    # جدول نهایی (Final table) - CHANGED: Added last_invoice_date and removed blanket fillna(0)
     features = pd.concat(
-        [recency, frequency, monetary, weekend_ratio, night_shopper, basket_diversity, return_rate],
+        [last_invoice_date, recency, frequency, monetary, weekend_ratio, night_shopper, basket_diversity, return_rate],
         axis=1
-    ).fillna(0).reset_index()
+    ).reset_index()
+
+    # DEFENSIVE ENGINEERING: Fill NAs with 0 ONLY for the numeric feature columns
+    numeric_cols = ["Recency", "Frequency", "Monetary", "Weekend_Ratio", "Night_Shopper", "Basket_Diversity", "Return_Rate"]
+    features[numeric_cols] = features[numeric_cols].fillna(0)
 
     return features
 

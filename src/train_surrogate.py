@@ -4,16 +4,16 @@ import numpy as np
 import pandas as pd
 import joblib
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+# PROFESSOR'S NOTE: Swapped RandomForest for DecisionTree and imported TimeSeriesSplit
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
-
 
 DATA_PATH = Path("data/processed/customer_with_clusters.csv")
 MODELS_DIR = Path("models")
 REPORTS_DIR = Path("reports")
 
-MODEL_PATH = MODELS_DIR / "surrogate_rf.joblib"
+MODEL_PATH = MODELS_DIR / "surrogate_rf.joblib" # Kept the same name so app.py doesn't break yet
 CM_PATH = REPORTS_DIR / "surrogate_confusion_matrix.csv"
 PER_CLASS_PATH = REPORTS_DIR / "surrogate_per_class_accuracy.csv"
 CV_PATH = REPORTS_DIR / "surrogate_cv_scores.csv"
@@ -54,27 +54,30 @@ def main():
 
     df = pd.read_csv(DATA_PATH)
 
+    # PROFESSOR'S NOTE: Chronological sorting applied before the split
+    if "LastInvoiceDate" in df.columns:
+        df["LastInvoiceDate"] = pd.to_datetime(df["LastInvoiceDate"])
+        df = df.sort_values("LastInvoiceDate").dropna(subset=["LastInvoiceDate"])
+    else:
+        print("WARNING: 'LastInvoiceDate' not found. Splitting will be sequential but not guaranteed chronological.")
+
     X = df[FEATURE_COLS].copy()
     y = df["ClusterID"].astype(int).copy()
 
-    # 1) Proper train/test split (stratified)
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y,
-        test_size=args.test_size,
-        random_state=args.seed,
-        stratify=y
-    )
+    # PROFESSOR'S NOTE: 1) Proper OUT-OF-TIME Split (Sequential instead of Random Shuffle)
+    split_idx = int(len(df) * (1 - args.test_size))
+    X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
+    y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
 
-    # 2) Train surrogate on TRAIN only
-    clf = RandomForestClassifier(
-        n_estimators=400,
+    # PROFESSOR'S NOTE: 2) Train an interpretable surrogate (Decision Tree) on TRAIN only
+    clf = DecisionTreeClassifier(
+        max_depth=5, 
         random_state=args.seed,
-        n_jobs=-1,
-        class_weight="balanced_subsample"
+        class_weight="balanced"
     )
     clf.fit(X_train, y_train)
 
-    # 3) Evaluate on TEST
+    # 3) Evaluate on TEST (Out-Of-Time Holdout)
     y_pred = clf.predict(X_test)
     test_acc = accuracy_score(y_test, y_pred)
 
@@ -91,13 +94,13 @@ def main():
 
     report = classification_report(y_test, y_pred, digits=4)
 
-    # 4) Cross-validation score (Stratified CV)
-    cv = StratifiedKFold(n_splits=args.cv_folds, shuffle=True, random_state=args.seed)
+    # PROFESSOR'S NOTE: 4) Time Series Cross-Validation to prevent temporal leakage across folds
+    cv = TimeSeriesSplit(n_splits=args.cv_folds)
     cv_scores = cross_val_score(clf, X, y, cv=cv, scoring="accuracy")
     cv_df = pd.DataFrame({"fold": np.arange(1, len(cv_scores) + 1), "accuracy": cv_scores})
     cv_df.to_csv(CV_PATH, index=False)
 
-    # 5) Save feature importances
+    # 5) Save feature importances (DecisionTree also supports feature_importances_)
     fi = pd.DataFrame({
         "feature": FEATURE_COLS,
         "importance": clf.feature_importances_
@@ -109,18 +112,19 @@ def main():
 
     # 7) Write summary text
     with open(SUMMARY_PATH, "w", encoding="utf-8") as f:
-        f.write("Surrogate evaluation (proper)\n")
+        f.write("Surrogate evaluation (Chronological Out-Of-Time)\n")
+        f.write(f"Model: DecisionTreeClassifier (max_depth=5)\n")
         f.write(f"Test size: {args.test_size}\n")
         f.write(f"Random seed: {args.seed}\n\n")
-        f.write(f"Test accuracy: {test_acc:.4f}\n")
-        f.write(f"CV (mean ± std) accuracy: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}\n\n")
+        f.write(f"Test accuracy (OOT): {test_acc:.4f}\n")
+        f.write(f"Time Series CV (mean ± std) accuracy: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}\n\n")
         f.write("Classification report (test):\n")
         f.write(report)
         f.write("\n")
 
-    # Console output (useful for you)
-    print(f"Test accuracy (fidelity proxy): {test_acc:.4f}")
-    print(f"CV accuracy mean ± std: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
+    # Console output
+    print(f"Test accuracy (Out-Of-Time fidelity proxy): {test_acc:.4f}")
+    print(f"Time Series CV accuracy mean ± std: {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
     print("Saved model:", MODEL_PATH)
     print("Saved confusion matrix:", CM_PATH)
     print("Saved per-class accuracy:", PER_CLASS_PATH)
