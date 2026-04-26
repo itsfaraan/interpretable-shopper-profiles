@@ -1,0 +1,42 @@
+name: CI Pipeline
+
+# 1. Triggers: When should this workflow run?
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    # 2. Environment: What OS should the temporary runner use?
+    runs-on: ubuntu-latest
+
+    steps:
+    # Step 1: Download your code into the GitHub runner
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    # Step 2: Set up the exact Python version you used in your Dockerfile
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+        cache: "pip" # This speeds up future runs by caching downloads
+
+    # Step 3: Install all your pinned dependencies
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    # Step 4: Run your unit tests (Pytest)
+    - name: Run tests
+      run: |
+        # This will automatically find and run any files named test_*.py
+        pytest
+
+    # Step 5: Verify the Docker image builds successfully without crashing
+    - name: Test Docker Build
+      run: |
+        docker build -t shopper-profiles-app:test .
