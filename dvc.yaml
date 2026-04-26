@@ -1,0 +1,46 @@
+stages:
+  build_features:
+    cmd: python src/make_features.py
+    deps:
+      - data/raw/online_retail_II.xlsx
+      - src/make_features.py
+    outs:
+      - data/processed/customer_features.csv
+
+  train_clustering:
+    cmd: python src/train_cluster.py --feature_set full --k 6
+    deps:
+      - data/processed/customer_features.csv
+      - src/train_cluster.py
+    outs:
+      - data/processed/customer_with_clusters_full.csv
+      - models/kmeans_full.joblib
+      - models/scaler_full.joblib
+    metrics:
+      - reports/k_metrics_full.csv:
+          cache: false
+      - reports/cluster_stability_ari_full.csv:
+          cache: false
+
+  assign_names:
+    cmd: python src/cluster_naming.py --feature_set full
+    deps:
+      - data/processed/customer_with_clusters_full.csv
+      - src/cluster_naming.py
+    outs:
+      - data/processed/customer_with_cluster_names_full.csv
+      - reports/cluster_names_full.csv
+      - reports/cluster_zscores_full.csv
+
+  train_surrogate_model:
+    cmd: python src/train_surrogate.py
+    deps:
+      - data/processed/customer_with_cluster_names_full.csv
+      - src/train_surrogate.py
+    outs:
+      - models/surrogate_rf.joblib
+    metrics:
+      - reports/surrogate_eval_summary.txt:
+          cache: false
+      - reports/surrogate_cv_scores.csv:
+          cache: false

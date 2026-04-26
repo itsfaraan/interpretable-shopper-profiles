@@ -1,3 +1,5 @@
+import mlflow
+import mlflow.sklearn
 import argparse
 from pathlib import Path
 import numpy as np
@@ -9,7 +11,8 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
-DATA_PATH = Path("data/processed/customer_with_clusters.csv")
+# DATA_PATH = Path("data/processed/customer_with_clusters.csv")
+DATA_PATH = Path("data/processed/customer_with_cluster_names_full.csv")
 MODELS_DIR = Path("models")
 REPORTS_DIR = Path("reports")
 
@@ -70,35 +73,50 @@ def main():
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
 
     # PROFESSOR'S NOTE: 2) Train an interpretable surrogate (Decision Tree) on TRAIN only
-    clf = DecisionTreeClassifier(
-        max_depth=5, 
-        random_state=args.seed,
-        class_weight="balanced"
-    )
-    clf.fit(X_train, y_train)
+    mlflow.set_experiment("Shopper_Segmentation_Surrogate")
+    
+    with mlflow.start_run(run_name="DecisionTree_OOT_Eval"):
+        
+        # Log Parameters
+        mlflow.log_param("max_depth", 5)
+        mlflow.log_param("test_size", args.test_size)
+        mlflow.log_param("cv_folds", args.cv_folds)
 
-    # 3) Evaluate on TEST (Out-Of-Time Holdout)
-    y_pred = clf.predict(X_test)
-    test_acc = accuracy_score(y_test, y_pred)
+        clf = DecisionTreeClassifier(
+            max_depth=5, 
+            random_state=args.seed,
+            class_weight="balanced"
+        )
+        clf.fit(X_train, y_train)
 
-    cm = confusion_matrix(y_test, y_pred, labels=sorted(y.unique()))
-    cm_df = pd.DataFrame(
-        cm,
-        index=[f"true_{c}" for c in sorted(y.unique())],
-        columns=[f"pred_{c}" for c in sorted(y.unique())],
-    )
-    cm_df.to_csv(CM_PATH, index=True)
+        # 3) Evaluate on TEST (Out-Of-Time Holdout)
+        y_pred = clf.predict(X_test)
+        test_acc = accuracy_score(y_test, y_pred)
 
-    per_cls_df = per_class_accuracy(y_test.to_numpy(), y_pred)
-    per_cls_df.to_csv(PER_CLASS_PATH, index=False)
+        # 4) Time Series Cross-Validation to prevent temporal leakage across folds
+        cv = TimeSeriesSplit(n_splits=args.cv_folds)
+        cv_scores = cross_val_score(clf, X, y, cv=cv, scoring="accuracy")
+        
+        # Log Metrics
+        mlflow.log_metric("test_accuracy_OOT", test_acc)
+        mlflow.log_metric("cv_accuracy_mean", cv_scores.mean())
+        
+        # Log Model Artifact
+        mlflow.sklearn.log_model(clf, "surrogate_decision_tree")
 
-    report = classification_report(y_test, y_pred, digits=4)
-
-    # PROFESSOR'S NOTE: 4) Time Series Cross-Validation to prevent temporal leakage across folds
-    cv = TimeSeriesSplit(n_splits=args.cv_folds)
-    cv_scores = cross_val_score(clf, X, y, cv=cv, scoring="accuracy")
-    cv_df = pd.DataFrame({"fold": np.arange(1, len(cv_scores) + 1), "accuracy": cv_scores})
-    cv_df.to_csv(CV_PATH, index=False)
+        # Generate the classification report (adding zero_division=0 to fix your previous warning!)
+    report = classification_report(y_test, y_pred, zero_division=0)
+    
+    # Save Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred)
+    pd.DataFrame(cm).to_csv(CM_PATH, index=False)
+    
+    # Save Per-Class Accuracy
+    per_class_df = per_class_accuracy(y_test, y_pred)
+    per_class_df.to_csv(PER_CLASS_PATH, index=False)
+    
+    # Save CV Scores
+    pd.DataFrame(cv_scores, columns=["accuracy"]).to_csv(CV_PATH, index=False)
 
     # 5) Save feature importances (DecisionTree also supports feature_importances_)
     fi = pd.DataFrame({

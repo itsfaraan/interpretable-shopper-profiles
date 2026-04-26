@@ -1,0 +1,98 @@
+schema: '2.0'
+stages:
+  build_features:
+    cmd: python src/make_features.py
+    deps:
+    - path: data/raw/online_retail_II.xlsx
+      hash: md5
+      md5: ed54ccfc5d358481c399cc11d0a244be
+      size: 45622278
+    - path: src/make_features.py
+      hash: md5
+      md5: 71faab332258cc98609cfe03df1095aa
+      size: 4544
+    outs:
+    - path: data/processed/customer_features.csv
+      hash: md5
+      md5: f28997fc2be89e7cd8526897ee8bcfd3
+      size: 413869
+  train_clustering:
+    cmd: python src/train_cluster.py --feature_set full --k 6
+    deps:
+    - path: data/processed/customer_features.csv
+      hash: md5
+      md5: f28997fc2be89e7cd8526897ee8bcfd3
+      size: 413869
+    - path: src/train_cluster.py
+      hash: md5
+      md5: 0a859cb782c6d59ede76c85007b282e1
+      size: 9297
+    outs:
+    - path: data/processed/customer_with_clusters_full.csv
+      hash: md5
+      md5: f38d043fba1355c85440148da79a51be
+      size: 417649
+    - path: models/kmeans_full.joblib
+      hash: md5
+      md5: 6670fc4356eb60ad88f0f907fbddb0dc
+      size: 24831
+    - path: models/scaler_full.joblib
+      hash: md5
+      md5: 45a15e4071b8a4e4ae78fd7619e1cbbb
+      size: 1151
+    - path: reports/cluster_stability_ari_full.csv
+      hash: md5
+      md5: 32cf06bf8a9101a657356d27593127d1
+      size: 4752
+    - path: reports/k_metrics_full.csv
+      hash: md5
+      md5: 9bcc0896101c733075ff57b4e5ae0f5a
+      size: 587
+  assign_names:
+    cmd: python src/cluster_naming.py --feature_set full
+    deps:
+    - path: data/processed/customer_with_clusters_full.csv
+      hash: md5
+      md5: f38d043fba1355c85440148da79a51be
+      size: 417649
+    - path: src/cluster_naming.py
+      hash: md5
+      md5: eb0a1f5287fec1d804ea53db53f49aac
+      size: 5720
+    outs:
+    - path: data/processed/customer_with_cluster_names_full.csv
+      hash: md5
+      md5: 25b9e8888e55dc12fdfd5afa3a8705b1
+      size: 569992
+    - path: reports/cluster_names_full.csv
+      hash: md5
+      md5: ddfe14fb6a505c11ad7eab694da19310
+      size: 170
+    - path: reports/cluster_zscores_full.csv
+      hash: md5
+      md5: 49f87bf7969b4f526eb9ccc288cb29db
+      size: 956
+  train_surrogate_model:
+    cmd: python src/train_surrogate.py
+    deps:
+    - path: data/processed/customer_with_cluster_names_full.csv
+      hash: md5
+      md5: 25b9e8888e55dc12fdfd5afa3a8705b1
+      size: 569992
+    - path: src/train_surrogate.py
+      hash: md5
+      md5: 548c9fe975632b987f01a07c3cf79d28
+      size: 5950
+    outs:
+    - path: models/surrogate_rf.joblib
+      hash: md5
+      md5: e9bed4699868c8da059b1425a3a5e5be
+      size: 4961
+    - path: reports/surrogate_cv_scores.csv
+      hash: md5
+      md5: a9dd93d58e04798a4138e04d2b692b64
+      size: 109
+    - path: reports/surrogate_eval_summary.txt
+      hash: md5
+      md5: c6b2e4bbed32a0ebdbb9061cca71bdd4
+      size: 750

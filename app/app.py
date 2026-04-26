@@ -112,21 +112,30 @@ with tab_individual:
 
     X_one = pd.DataFrame([row[feature_cols].values], columns=feature_cols)
     pred_class = int(clf.predict(X_one)[0])
+    
+    # === THE FIX: Find the actual index of the class inside the model ===
+    class_idx = list(clf.classes_).index(pred_class)
 
     explainer = shap.TreeExplainer(clf)
-    try:
-        exp = explainer(X_one)
-        values = np.array(exp.values)
-        if values.ndim == 3:
-            vals_1d = values[0, :, pred_class].astype(float)
+    shap_values = explainer.shap_values(X_one)
+
+    # 1. Standard Extraction Attempt (Now using class_idx instead of pred_class)
+    if isinstance(shap_values, list):
+        vals_1d = np.array(shap_values[class_idx][0], dtype=float)
+    else:
+        shap_array = np.array(shap_values)
+        if shap_array.ndim == 3:
+            vals_1d = shap_array[0, :, class_idx].astype(float)
         else:
-            vals_1d = values[0, :].astype(float)
-    except Exception:
-        shap_values = explainer.shap_values(X_one)
-        if isinstance(shap_values, list):
-            vals_1d = np.array(shap_values[pred_class][0], dtype=float)
-        else:
-            vals_1d = np.array(shap_values[0], dtype=float)
+            vals_1d = shap_array[0].astype(float)
+            
+    vals_1d = vals_1d.flatten()
+
+    # 2. THE ULTIMATE SAFETY NET (Prevents IndexError forever)
+    if len(vals_1d) == len(feature_cols) * len(PERSONA_MAP):
+        vals_1d = vals_1d.reshape(len(feature_cols), len(PERSONA_MAP))[:, class_idx]
+    elif len(vals_1d) > len(feature_cols):
+        vals_1d = vals_1d[:len(feature_cols)]
 
     col_chart, col_text = st.columns([2, 1])
 
@@ -135,7 +144,7 @@ with tab_individual:
         try:
             order = np.argsort(np.abs(vals_1d))[::-1][:6]
             colors = ['green' if x > 0 else 'red' for x in vals_1d[order][::-1]]
-            plt.barh([feature_cols[i] for i in order][::-1], vals_1d[order][::-1], color=colors)
+            plt.barh([feature_cols[int(i)] for i in order][::-1], vals_1d[order][::-1], color=colors)
             plt.title("Impact of specific features on this persona")
             plt.xlabel("SHAP Value (Impact)")
             plt.tight_layout()
@@ -149,13 +158,16 @@ with tab_individual:
         
         top_idx = np.argsort(np.abs(vals_1d))[::-1][:3]
         st.write("**Top deciding factors:**")
+        
+        # === 2. UPDATE THIS LOOP ===
         for i in top_idx:
-            feat = feature_cols[i]
-            direction = "raised" if vals_1d[i] > 0 else "lowered"
+            idx = int(i) # Force it to be a standard Python integer
+            feat = feature_cols[idx]
+            direction = "raised" if vals_1d[idx] > 0 else "lowered"
             st.write(f"- Their **{feat}** significantly {direction} the likelihood of this profile.")
         
-        st.info(f"🎯 **Recommended Action:**\n\n{ACTION_MAP.get(pred_class, 'Review profile manually.')}")
-
+        st.info(f"💡 **Recommended Action:**\n\n{ACTION_MAP.get(pred_class, 'Review profile manually.')}")
+    
     # --- SIMULATOR ---
     st.markdown("---")
     st.markdown("### 🎛️ 'What-If' Scenario Simulator")

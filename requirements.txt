@@ -1,9 +1,12 @@
 pandas
-numpy
+numpy<2.0
 openpyxl
 scikit-learn
 matplotlib
 joblib
-shap
+shap<0.50.0
 streamlit
 pytest
+dvc
+mlflow
+protobuf<5

@@ -1,3 +1,5 @@
+import mlflow
+import mlflow.sklearn
 import argparse
 import itertools
 from pathlib import Path
@@ -213,51 +215,50 @@ def main():
     print(f"Saved: {K_METRICS_REPORT}")
 
     # 2) Fit final model on full data
-    kmeans = KMeans(n_clusters=args.k, random_state=args.seed, n_init=10)
-    labels = kmeans.fit_predict(X_scaled)
+    mlflow.set_experiment("Shopper_Segmentation_Clustering")
+    
+    with mlflow.start_run(run_name=f"KMeans_{args.feature_set}_k{args.k}"):
+        
+        # Log Parameters
+        mlflow.log_param("feature_set", args.feature_set)
+        mlflow.log_param("k", args.k)
+        mlflow.log_param("seed", args.seed)
+        mlflow.log_param("noise_eps", args.noise_eps)
 
-    out_df = df.copy()
-    out_df["ClusterID"] = labels
-    out_df.to_csv(OUT_WITH_CLUSTERS, index=False)
+        kmeans = KMeans(n_clusters=args.k, random_state=args.seed, n_init=10)
+        labels = kmeans.fit_predict(X_scaled)
 
-    joblib.dump(kmeans, KMEANS_MODEL_PATH)
-    joblib.dump(scaler, SCALER_PATH)
+        out_df = df.copy()
+        out_df["ClusterID"] = labels
+        out_df.to_csv(OUT_WITH_CLUSTERS, index=False)
 
-    print(f"\nChosen k: {args.k}")
-    print(f"Saved: {OUT_WITH_CLUSTERS}")
-    print(f"Saved models: {KMEANS_MODEL_PATH}, {SCALER_PATH}")
+        joblib.dump(kmeans, KMEANS_MODEL_PATH)
+        joblib.dump(scaler, SCALER_PATH)
 
-    # 3) Stability (ARI)
-    pairs, mean_ari, std_ari = cluster_stability_ari(
-        X_scaled,
-        k=args.k,
-        runs=args.stability_runs,
-        bootstrap=args.bootstrap,
-        bootstrap_frac=args.bootstrap_frac,
-    )
-    stab_df = pd.DataFrame(pairs, columns=["run_i", "run_j", "ARI"])
-    stab_df["k"] = args.k
-    stab_df["feature_set"] = args.feature_set
-    stab_df["bootstrap"] = bool(args.bootstrap)
-    stab_df["bootstrap_frac"] = float(args.bootstrap_frac)
-    stab_df.to_csv(STABILITY_REPORT, index=False)
+        # 3) Stability (ARI)
+        pairs, mean_ari, std_ari = cluster_stability_ari(
+            X_scaled, k=args.k, runs=args.stability_runs,
+            bootstrap=args.bootstrap, bootstrap_frac=args.bootstrap_frac,
+        )
+        stab_df = pd.DataFrame(pairs, columns=["run_i", "run_j", "ARI"])
+        stab_df.to_csv(STABILITY_REPORT, index=False)
+        
+        # Log Stability Metrics
+        mlflow.log_metric("mean_ari", mean_ari)
+        mlflow.log_metric("std_ari", std_ari)
 
-    print("\n=== Cluster Stability (ARI) ===")
-    print(f"Runs: {args.stability_runs} | bootstrap={args.bootstrap} | frac={args.bootstrap_frac}")
-    print(f"Pairwise ARI mean ± std: {mean_ari:.4f} ± {std_ari:.4f}")
-    print(f"Saved: {STABILITY_REPORT}")
-
-    # 4) Robustness to noise (% label changes)
-    noise_df, mean_changed, std_changed = noise_robustness(
-        X_scaled=X_scaled,
-        baseline_labels=labels,
-        k=args.k,
-        eps=args.noise_eps,
-        runs=args.noise_runs,
-        seed=args.noise_seed,
-    )
-    noise_df["feature_set"] = args.feature_set
-    noise_df.to_csv(NOISE_REPORT, index=False)
+        # 4) Robustness to noise (% label changes)
+        noise_df, mean_changed, std_changed = noise_robustness(
+            X_scaled=X_scaled, baseline_labels=labels, k=args.k,
+            eps=args.noise_eps, runs=args.noise_runs, seed=args.noise_seed,
+        )
+        noise_df.to_csv(NOISE_REPORT, index=False)
+        
+        # Log Noise Metrics
+        mlflow.log_metric("noise_changed_pct", mean_changed)
+        
+        # Log the Model Artifact
+        mlflow.sklearn.log_model(kmeans, "kmeans_model")
 
     print("\n=== Robustness to Noise (Label Changes) ===")
     print(f"Noise eps (on scaled features): {args.noise_eps}")

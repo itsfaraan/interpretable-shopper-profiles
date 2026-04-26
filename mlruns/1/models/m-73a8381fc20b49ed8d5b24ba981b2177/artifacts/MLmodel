@@ -1,0 +1,24 @@
+artifact_path: file:///C:/Users/jerem/Documents/NAPOLI FEDERICO/Year 2/SEM 2/AI Systems
+  Engineering/Project/interpretable-shopper-profiles/interpretable-shopper-profiles/mlruns/1/models/m-73a8381fc20b49ed8d5b24ba981b2177/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.12.4
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.8.0
+    skops_trusted_types: null
+mlflow_version: 3.11.1
+model_id: m-73a8381fc20b49ed8d5b24ba981b2177
+model_size_bytes: 24708
+model_uuid: m-73a8381fc20b49ed8d5b24ba981b2177
+prompts: null
+run_id: 2b9dac7b3626464987f61ceeda86f179
+utc_time_created: '2026-04-15 14:15:22.399020'
